@@ -6,6 +6,8 @@
 struct task_descriptor {
     context *cleaner;
     context *main;
+    std::function<void()> *cleaner_fn;
+    std::function<void()> *main_fn;
 };
 
 
@@ -71,18 +73,22 @@ private:
     }
 
     bool next() {
+        if (m_last_active != nullptr) {
+            delete m_last_active->main;
+            delete m_last_active->cleaner;
+            delete m_last_active->main_fn;
+            delete m_last_active->cleaner_fn;
+            delete m_last_active;
+            m_last_active = nullptr;
+            return true;
+        }
+
         if (m_submit_request) {
             m_submit_request = false;
             m_active += io_uring_submit(&m_io_uring);
             return true;
         }
-        if (m_last_active != nullptr) {
-            delete m_last_active->main;
-            delete m_last_active->cleaner;
-            delete m_last_active;
-            m_last_active = nullptr;
-            return true;
-        }
+
 
         io_uring_cqe *cqe;
         if (io_uring_peek_cqe(&m_io_uring, &cqe) == 0) {
@@ -112,12 +118,16 @@ private:
     template<size_t stack_size>
     lambda_context<stack_size> *construct_task(const std::function<void()>& task) {
         auto* taskDescriptor = new task_descriptor{};
-        auto cleanup = new lambda_context<EVENT_LOOP_CLEANUP_STACK_SIZE>([taskDescriptor, this]{
+        auto cleanupFn = new std::function([taskDescriptor, this]{
             this->m_last_active = taskDescriptor;
-        }, &m_scheduler);
-        auto main = new lambda_context<stack_size>(task, cleanup);
+        });
+        auto mainFn = new std::function(task);
+        auto cleanup = new lambda_context<EVENT_LOOP_CLEANUP_STACK_SIZE>(cleanupFn, &m_scheduler);
+        auto main = new lambda_context<stack_size>(mainFn, cleanup);
         taskDescriptor->cleaner = cleanup;
         taskDescriptor->main = main;
+        taskDescriptor->cleaner_fn = cleanupFn;
+        taskDescriptor->main_fn = mainFn;
         return main;
     }
 

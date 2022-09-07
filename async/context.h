@@ -31,12 +31,12 @@ protected:
 template<size_t size>
 class lambda_context : public context {
 public:
-    lambda_context(std::function<void()> fn, context *link = nullptr) : context(link), m_lambda(fn) {
+    lambda_context(std::function<void()>* fn, context *link = nullptr) : context(link) {
         m_ucontext.uc_stack.ss_size = sizeof m_stack;
         m_ucontext.uc_stack.ss_sp = m_stack;
         sigemptyset(&m_ucontext.uc_sigmask);
         VALGRIND_STACK_REGISTER((char*)m_ucontext.uc_stack.ss_sp, (char*)m_ucontext.uc_stack.ss_sp + m_ucontext.uc_stack.ss_size);
-        makecontext(&m_ucontext, reinterpret_cast<void (*)()>(lambda_context<size>::call_lambda), 1, reinterpret_cast<void*>(&m_lambda));
+        makecontext(&m_ucontext, reinterpret_cast<void (*)()>(lambda_context<size>::call_lambda), 1, reinterpret_cast<void*>(fn));
     }
     ~lambda_context() {
         VALGRIND_STACK_DEREGISTER((char*)m_ucontext.uc_stack.ss_sp);
@@ -47,5 +47,4 @@ private:
 
     }
     char m_stack[size]{};
-    std::function<void()> m_lambda;
 };
