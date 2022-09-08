@@ -11,8 +11,20 @@ public:
         swapcontext(&m_ucontext, &context->m_ucontext);
     }
 
-    static context self() {
-        return context(nullptr);
+    static context self(context *link = nullptr) {
+        return context(link);
+    }
+
+    static context self_alloc(context *link = nullptr) {
+        return new context(link);
+    }
+
+    void register_stack() {
+        VALGRIND_STACK_REGISTER((char*)m_ucontext.uc_stack.ss_sp, (char*)m_ucontext.uc_stack.ss_sp + m_ucontext.uc_stack.ss_size);
+    }
+
+    void unregister_stack() {
+        VALGRIND_STACK_DEREGISTER((char*)m_ucontext.uc_stack.ss_sp);
     }
 
     ucontext_t m_ucontext{};
@@ -35,11 +47,11 @@ public:
         m_ucontext.uc_stack.ss_size = sizeof m_stack;
         m_ucontext.uc_stack.ss_sp = m_stack;
         sigemptyset(&m_ucontext.uc_sigmask);
-        VALGRIND_STACK_REGISTER((char*)m_ucontext.uc_stack.ss_sp, (char*)m_ucontext.uc_stack.ss_sp + m_ucontext.uc_stack.ss_size);
+        register_stack();
         makecontext(&m_ucontext, reinterpret_cast<void (*)()>(lambda_context<size>::call_lambda), 1, reinterpret_cast<void*>(fn));
     }
     ~lambda_context() {
-        VALGRIND_STACK_DEREGISTER((char*)m_ucontext.uc_stack.ss_sp);
+        unregister_stack();
     }
 private:
     static void call_lambda(std::function<void()>* f) {

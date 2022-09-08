@@ -2,19 +2,21 @@
 #include "../async/io.h"
 #include "../async/async.h"
 
+io::file error{STDERR_FILENO};
 
+ASYNC_INIT();
 
-ASYNC_ENTRYPOINT(int argc, char **argv) {
+int main(int argc, char **argv) {
     if (argc != 2) {
-        std::string str = "Invalid syntax.";
-        io::write(STDERR_FILENO, str.c_str(), str.length(), 0);
+        std::string str = "Invalid syntax";
+        error.write(str);
         return 1;
     }
     auto err = io::mkdir(argv[1], 0);
 
     if (err) {
-        std::string error = std::strerror(err);
-        io::write(STDERR_FILENO, error.c_str(), error.length(), 0);
+        std::string msg = std::strerror(err);
+        error.write(msg);
         return 1;
     } else {
         return 0;

@@ -17,39 +17,72 @@ struct task_descriptor {
 
 class event_loop {
 public:
-    static event_loop& self() {
-        static event_loop theInstance{EVENT_LOOP_DEPTH};
-        return theInstance;
+    static event_loop* self(int32_t event_loop_depth = -1) {
+        static event_loop* value = nullptr;
+        static int32_t depth = 0;
+        if (event_loop_depth == -1) {
+            if (depth == 0) {
+                event_loop_depth = EVENT_LOOP_DEPTH;
+            } else {
+                event_loop_depth = depth;
+            }
+        }
+
+        if (event_loop_depth == depth) {
+            return value;
+        }
+
+        if (value != nullptr) {
+            delete value;
+        }
+
+        depth = event_loop_depth;
+        value = new event_loop(event_loop_depth);
+        return value;
     }
     ~event_loop() {
         io_uring_queue_exit(&m_io_uring);
     }
 
 
-    [[nodiscard]] uint32_t error() const {
+    [[nodiscard]] int32_t error() const {
         return m_errno;
     }
 
-    void run() {
-        while(active()) {
-            if (!next()) {
-                sched_yield();
-            }
-        }
-    }
 
     void yield() {
         m_contexts.push_back(m_active_context);
         yield_scheduler();
     }
 
-    uint32_t request(const std::function<void(io_uring_sqe*)>& request_factory) {
+    int32_t request(const std::function<void(io_uring_sqe*)>& request_factory) {
         m_submit_request = true;
         auto *sqe = io_uring_get_sqe(&m_io_uring);
         io_uring_sqe_set_data(sqe, m_active_context);
         request_factory(sqe);
         yield_scheduler();
         return error();
+    }
+
+    void start() {
+        static auto taskDescriptor = task_descriptor();
+        taskDescriptor.main_fn = new std::function([this]{
+            this->run();
+        });
+
+        taskDescriptor.cleaner_fn = new std::function([&] {
+            delete taskDescriptor.main_fn;
+            delete taskDescriptor.main;
+            delete taskDescriptor.cleaner_fn;
+            delete taskDescriptor.cleaner;
+        });
+
+        taskDescriptor.cleaner = new lambda_context<EVENT_LOOP_CLEANUP_STACK_SIZE>(taskDescriptor.cleaner_fn, nullptr);
+        taskDescriptor.main = new lambda_context<4096>(taskDescriptor.main_fn, taskDescriptor.cleaner);
+
+        static auto context = context::self(taskDescriptor.main);
+        m_contexts.push_back(&context);
+        context.swap(taskDescriptor.main);
     }
 
     template<size_t stack_size = EVENT_LOOP_DEFAULT_TASK_STACK_SIZE>
@@ -66,6 +99,14 @@ private:
 
     [[nodiscard]] bool active() const {
         return m_active > 0 || !m_contexts.empty() || m_last_active || m_submit_request;
+    }
+
+    void run() {
+        while (active()) {
+            if (!next()) {
+                sched_yield();
+            }
+        }
     }
 
     void yield_scheduler() {
@@ -135,7 +176,7 @@ private:
     uint32_t m_entries;
     bool m_submit_request{};
     uint32_t m_active{};
-    uint32_t m_errno{};
+    int32_t m_errno{};
     std::deque<context*> m_contexts{};
     context m_scheduler;
     context *m_active_context{};
