@@ -21,4 +21,4 @@ namespace async {
 #define ASYNC_INIT(__DEPTH__) [[gnu::constructor, maybe_unused]] void _async_init() { \
     async::init(__DEPTH__);                                                           \
 }                                                                                     \
-[[maybe_unused]] struct _async {}
+struct _async {}
