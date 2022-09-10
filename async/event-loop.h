@@ -3,12 +3,19 @@
 #include <deque>
 #include "context.h"
 
-struct task_descriptor {
+struct task {
+    virtual void wait() = 0;
+};
+
+struct task_descriptor : public task {
     context *cleaner;
     context *main;
     std::function<void()> *cleaner_fn;
     std::function<void()> *main_fn;
+    std::vector<std::function<void()>*> callbacks{};
+    void wait() final;
 };
+
 
 
 #define EVENT_LOOP_DEPTH 32
@@ -49,7 +56,14 @@ public:
         return m_errno;
     }
 
+    void yield_scheduler() {
+        m_active_context->swap(&m_scheduler);
+    }
 
+
+    void queue_context(context *task) {
+        m_contexts.push_back(task);
+    }
     void yield() {
         m_contexts.push_back(m_active_context);
         yield_scheduler();
@@ -64,6 +78,12 @@ public:
         return error();
     }
 
+    context *current() {
+        return m_active_context;
+    }
+
+
+
     void start() {
         static auto taskDescriptor = task_descriptor();
         taskDescriptor.main_fn = new std::function([this]{
@@ -71,6 +91,10 @@ public:
         });
 
         taskDescriptor.cleaner_fn = new std::function([&] {
+            for(auto& call : taskDescriptor.callbacks) {
+                call->operator()();
+                delete call;
+            }
             delete taskDescriptor.main_fn;
             delete taskDescriptor.main;
             delete taskDescriptor.cleaner_fn;
@@ -86,8 +110,10 @@ public:
     }
 
     template<size_t stack_size = EVENT_LOOP_DEFAULT_TASK_STACK_SIZE>
-    void queue_task(const std::function<void()>& task) {
-        m_contexts.push_back(construct_task<stack_size>(task));
+    task *queue_task(const std::function<void()>& task) {
+        auto descriptor = construct_task<stack_size>(task);
+        m_contexts.push_back(descriptor->main);
+        return descriptor;
     }
 
 private:
@@ -109,12 +135,14 @@ private:
         }
     }
 
-    void yield_scheduler() {
-        m_active_context->swap(&m_scheduler);
-    }
+
 
     bool next() {
         if (m_last_active != nullptr) {
+            for(auto& call : m_last_active->callbacks) {
+                call->operator()();
+                delete call;
+            }
             delete m_last_active->main;
             delete m_last_active->cleaner;
             delete m_last_active->main_fn;
@@ -157,7 +185,7 @@ private:
     }
 
     template<size_t stack_size>
-    lambda_context<stack_size> *construct_task(const std::function<void()>& task) {
+    task_descriptor *construct_task(const std::function<void()>& task) {
         auto* taskDescriptor = new task_descriptor{};
         auto cleanupFn = new std::function([taskDescriptor, this]{
             this->m_last_active = taskDescriptor;
@@ -169,7 +197,7 @@ private:
         taskDescriptor->main = main;
         taskDescriptor->cleaner_fn = cleanupFn;
         taskDescriptor->main_fn = mainFn;
-        return main;
+        return taskDescriptor;
     }
 
     io_uring m_io_uring{};
@@ -182,3 +210,12 @@ private:
     context *m_active_context{};
     task_descriptor *m_last_active{};
 };
+
+
+void task_descriptor::wait() {
+    auto current = event_loop::self()->current();
+    callbacks.push_back(new std::function([current]{
+        event_loop::self()->queue_context(current);
+    }));
+    event_loop::self()->yield_scheduler();
+}

@@ -8,8 +8,17 @@ namespace async {
     }
 
     template<size_t stack_size = EVENT_LOOP_DEFAULT_TASK_STACK_SIZE>
-    void queue_task(const std::function<void()>& task) {
-        event_loop::self()->queue_task<stack_size>(task);
+    task *defer(const std::function<void()>& task) {
+        return event_loop::self()->queue_task<stack_size>(task);
+    }
+
+    void await(task* value) {
+        value->wait();
+    }
+
+    template<size_t stack_size = EVENT_LOOP_DEFAULT_TASK_STACK_SIZE>
+    void await(const std::function<void()>& task) {
+        await(defer<stack_size>(task));
     }
 
     void init(int32_t event_loop_depth = -1) {

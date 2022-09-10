@@ -1,6 +1,5 @@
-#include <cstring>
-#include "../async/io.h"
 #include "../async/async.h"
+#include "../async/io.h"
 
 io::file error{STDERR_FILENO};
 

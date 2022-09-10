@@ -2,6 +2,8 @@
 
 #include "event-loop.h"
 #include <span>
+#include <cstring>
+
 namespace io {
     int32_t mkdir(const std::string& path, mode_t mode) {
         return event_loop::self()->request([path, mode](io_uring_sqe* sqe) {

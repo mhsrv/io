@@ -4,4 +4,6 @@ project(io)
 set(CMAKE_CXX_STANDARD 23)
 
 add_executable(mkdir examples/mkdir.cpp)
+add_executable(defer examples/defer.cpp)
 target_link_libraries(mkdir PUBLIC uring)
+target_link_libraries(defer PUBLIC uring)
