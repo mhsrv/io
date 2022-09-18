@@ -5,6 +5,8 @@ io::file output{STDOUT_FILENO};
 
 ASYNC_INIT();
 
+// todo: make sure that async::await() doesn't segfault for completed tasks (probably implement promises)
+
 void test() {
     async::yield();
     std::string test = "Test\n";

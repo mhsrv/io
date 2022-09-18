@@ -1,9 +1,15 @@
 cmake_minimum_required(VERSION 3.22)
 project(io)
-
+enable_language(C ASM)
 set(CMAKE_CXX_STANDARD 23)
+set(ASM_OPTIONS "-x assembler-with-cpp")
+SET(CMAKE_ASM_FLAGS "${CFLAGS} ${ASM_OPTIONS}")
+add_library(context_x86 STATIC context/x86.s)
 
 add_executable(mkdir examples/mkdir.cpp)
 add_executable(defer examples/defer.cpp)
+add_executable(ctx examples/ctx.cpp)
+
 target_link_libraries(mkdir PUBLIC uring)
 target_link_libraries(defer PUBLIC uring)
+target_link_libraries(ctx PUBLIC context_x86)
