@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.22)
+project(io)
+add_executable(hello hello-world.c)
+add_executable(hello-cpp hello-world.cpp)
+add_executable(mkdir-cpp mkdir.cpp)
+target_link_libraries(hello async)
+target_link_libraries(hello-cpp async)
+target_link_libraries(mkdir-cpp async)
