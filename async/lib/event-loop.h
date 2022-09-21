@@ -3,7 +3,7 @@
 
 #include <libco.h>
 
-#define IO_URING_DEPTH 1024
+#define IO_URING_DEPTH 1024*32
 #define IO_URING_SQ_THREAD_IDLE 120000
 typedef void delegate_fn(void *data);
 typedef void sqe_delegate_fn(void *data, void *sqe);

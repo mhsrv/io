@@ -11,6 +11,8 @@ int32_t io_mkdir(char *path, mode_t mode);
 int32_t io_write(int fd, const char *buf, uint32_t amount, size_t offset);
 int32_t io_read(int fd, char *buf, uint32_t amount, size_t offset);
 int32_t io_close(int fd);
+int32_t io_socket(int domain, int type, int protocol, int flags);
+int32_t io_accept(int fd, sockaddr *addr, socklen_t *addrlen, int flags);
 
 #ifdef __cplusplus
 }
@@ -33,6 +35,14 @@ namespace io {
 
     static inline int32_t close(int fd) {
         return io_close(fd);
+    }
+
+    static inline int32_t accept(int fd, sockaddr *addr, socklen_t *addrlen, int flags) {
+        return io_accept(fd, addr, addrlen, flags);
+    }
+
+    static inline int32_t socket(int domain, int type, int protocol, int flags) {
+        return io_socket(domain, type, protocol, flags);
     }
 
 

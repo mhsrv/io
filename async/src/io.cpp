@@ -28,6 +28,18 @@ int32_t io_close(int fd) {
 
 }
 
+int32_t io_socket(int domain, int type, int protocol, int flags) {
+    return -async::request([domain, type, protocol, flags](io_uring_sqe *sqe) {
+        io_uring_prep_socket(sqe, domain, type, protocol, flags);
+    });
+}
+
+int32_t io_accept(int fd, sockaddr *addr, socklen_t *addrlen, int flags) {
+    return -async::request([fd, addr, addrlen, flags](io_uring_sqe *sqe) {
+        io_uring_prep_accept(sqe, fd, addr, addrlen, flags);
+    });
+}
+
 io::file::file(int fd, bool close) {
     m_fd = fd;
     m_should_close = close;
