@@ -12,8 +12,7 @@ int main(int argc, char **argv) {
         auto err = io::mkdir(argv[1], 0);
 
         if (err) {
-            std::string msg = std::strerror(err);
-            error.write("Invalid syntax");
+            error.write(std::strerror(err));
         }
     });
 }
