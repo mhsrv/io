@@ -12,18 +12,14 @@ int main() {
             throw std::runtime_error("io_socket()");
         }
         int opt = 1;
-
         if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt)) < 0) {
             throw std::runtime_error("setsockopt()");
         }
-
         struct sockaddr_in addr{};
         addr.sin_family = AF_INET;
         addr.sin_port = htons(1234);
         inet_aton("127.0.0.1", &addr.sin_addr);
-
         socklen_t addr_len = sizeof(addr);
-
         if (bind(sock, (struct sockaddr *)&addr, addr_len) < 0) {
             throw std::runtime_error("bind()");
 
@@ -31,13 +27,9 @@ int main() {
         if (listen(sock, 1024) == -1) {
             throw std::runtime_error("listen()");
         }
-
         int client;
-
         while((client = io::accept(sock, (struct sockaddr *) &addr, &addr_len, 0)) > 0) {
-            auto* task = async::current_task();
-            async::defer([client, task] {
-                async::resume(task);
+            async::defer([client] {
                 io::file connection{client, true};
                 connection.write(
                         "HTTP/1.1 200 OK" ENDL
@@ -48,7 +40,6 @@ int main() {
                         "<h1>Hello, World!</h1>" ENDL
                         );
             });
-            async::suspend();
         }
 
         io::file(2).write(strerror(client));
