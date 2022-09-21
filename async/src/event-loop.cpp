@@ -56,6 +56,14 @@ void io_task_register_destructor(task_t *task, closure_t destructor) {
     task->m_cleanup.push_back(destructor);
 }
 
+void io_event_scheduler_queue_microtask(closure_t closure, closure_t destructor) {
+    g_scheduler.queue_microtask(closure, destructor);
+}
+
+void io_task_suspend() {
+    co_switch(g_scheduler.m_thread);
+}
+
 void task::activate() {
     if (!m_active) {
         m_active = true;
@@ -126,6 +134,16 @@ void scheduler::run_loop() {
             m_active_context = nullptr;
         }
 
+        if (!m_microtasks.empty()) {
+            for(size_t i = 0; i < m_microtasks.size(); i++) {
+                const auto& microtask = m_microtasks[i];
+                microtask.closure.fn(microtask.closure.data);
+                microtask.destructor.fn(microtask.destructor.data);
+            }
+
+            m_microtasks.clear();
+        }
+
         if (m_submit_request) {
             m_submit_request = false;
             m_active += io_uring_submit(&m_io_uring);
@@ -145,6 +163,7 @@ void scheduler::run_loop() {
 
             delete task_ref;
         }
+
     }
 
     pthread_exit(0);
@@ -152,4 +171,8 @@ void scheduler::run_loop() {
 
 void scheduler::queue_for_cleanup(task *task_ref) {
     m_cleanup.push_back(task_ref);
+}
+
+void scheduler::queue_microtask(closure_t closure, closure_t destructor) {
+    m_microtasks.push_back({closure, destructor});
 }

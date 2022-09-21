@@ -54,3 +54,11 @@ io::file::~file() {
         io::close(m_fd);
     }
 }
+
+size_t io::file::write(const std::string_view &buf, size_t offset) {
+    auto err = io::write(m_fd, buf.data(), buf.size(), offset);
+    if (err > 0) {
+        throw std::runtime_error(std::strerror(err));
+    }
+    return -err;
+}
