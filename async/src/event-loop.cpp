@@ -27,6 +27,7 @@ task_t *io_task_create(closure_t closure, size_t stack_size) {
 thread_local task *g_activating_task = nullptr;
 
 void activate_task() {
+    g_scheduler.m_active++;
     auto task_ref = g_activating_task;
     task_ref->m_closure.fn(task_ref->m_closure.data);
     g_scheduler.queue_for_cleanup(task_ref);
@@ -90,7 +91,11 @@ void scheduler::queue(task *task) {
 }
 
 void scheduler::request(request_closure_t closure) {
-    auto *sqe = io_uring_get_sqe(&m_io_uring);
+    io_uring_sqe *sqe;
+    while((sqe = io_uring_get_sqe(&m_io_uring)) == nullptr) {
+        m_contexts.push_back(g_scheduler.m_active_context);
+        co_switch(g_scheduler.m_thread);
+    }
     io_uring_sqe_set_data(sqe, m_active_context);
     closure.fn(closure.data, sqe);
     m_submit_request = true;
@@ -100,11 +105,11 @@ void scheduler::request(request_closure_t closure) {
 
 scheduler::scheduler() {
     struct io_uring_params params{};
-    params.flags |= IORING_SETUP_SQPOLL | IORING_FEAT_SQPOLL_NONFIXED;
+    params.flags |= IORING_SETUP_SQPOLL;
+    params.features |= IORING_FEAT_SQPOLL_NONFIXED;
     params.sq_thread_idle = IO_URING_SQ_THREAD_IDLE;
-    io_uring_queue_init(IO_URING_DEPTH, &m_io_uring, 0);
+    io_uring_queue_init_params(IO_URING_DEPTH, &m_io_uring, &params);
 }
-
 
 scheduler::~scheduler() {
     io_uring_queue_exit(&m_io_uring);
@@ -121,7 +126,6 @@ void scheduler::run_loop() {
             ctx->activate();
             m_active_context = nullptr;
             m_errno = 0;
-            m_active--;
         }
 
         if (m_contexts.empty()) {
@@ -146,7 +150,7 @@ void scheduler::run_loop() {
 
         if (m_submit_request) {
             m_submit_request = false;
-            m_active += io_uring_submit(&m_io_uring);
+            io_uring_submit(&m_io_uring);
         }
 
         while(!m_cleanup.empty()) {
@@ -160,7 +164,7 @@ void scheduler::run_loop() {
             for (auto& destructor : task_ref->m_cleanup) {
                 destructor.fn(destructor.data);
             }
-
+            m_active--;
             delete task_ref;
         }
 

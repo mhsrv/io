@@ -44,7 +44,7 @@ public:
     cothread_t m_thread;
     std::deque<task*> m_contexts{};
     std::deque<task*> m_cleanup{};
-    std::vector<microtask> m_microtasks{};
+    std::vector<microtask_t> m_microtasks{};
     int32_t m_errno{};
     uint32_t m_active{};
     io_uring m_io_uring{};
