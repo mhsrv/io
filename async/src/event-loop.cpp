@@ -145,7 +145,7 @@ void scheduler::run_loop() {
         }
 
 #if defined(IO_EVENT_LOOP_HIGH_EFFICIENCY) || defined(IO_EVENT_LOOP_WAIT_FOR_CQE)
-        if (m_contexts.empty() && m_microtasks.empty() && !m_submit_request) {
+        if (m_contexts.empty() && m_microtasks.empty() && m_cleanup.empty() && !m_submit_request) {
             if (io_uring_wait_cqe(&m_io_uring, &cqe) == 0) {
                 process_single_cqe(cqe);
             }
