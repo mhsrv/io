@@ -45,12 +45,21 @@ namespace io {
         return io_socket(domain, type, protocol, flags);
     }
 
+    struct address {
+        sockaddr addr{};
+        socklen_t addrlen{};
+        address() {
+            addrlen = sizeof addr;
+        }
+    };
 
     struct file {
         file(int fd, bool close = false);
-        size_t read(const std::span<char>& buf, size_t offset = 0);
-        size_t write(const std::span<char>& buf, size_t offset = 0);
-        size_t write(const std::string_view& str, size_t offset = 0);
+        size_t read(const std::span<char>& buf, size_t offset = 0) const;
+        size_t write(const std::span<char>& buf, size_t offset = 0) const;
+        size_t write(const std::string_view& str, size_t offset = 0) const;
+        file accept(address& address, int flags = 0) const;
+        void close() const;
         ~file();
     private:
         int m_fd;
