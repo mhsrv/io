@@ -3,6 +3,11 @@
 
 thread_local scheduler g_scheduler{};
 
+template<typename T>
+inline static void closure_invoke(T&& closure) {
+    closure.fn(closure.data);
+}
+
 void io_event_loop(void) {
     g_scheduler.run_loop();
 }
@@ -29,7 +34,7 @@ thread_local task *g_activating_task = nullptr;
 void activate_task() {
     g_scheduler.m_active++;
     auto task_ref = g_activating_task;
-    task_ref->m_closure.fn(task_ref->m_closure.data);
+    closure_invoke(task_ref->m_closure);
     g_scheduler.queue_for_cleanup(task_ref);
     co_switch(g_scheduler.m_thread);
 }
@@ -105,9 +110,11 @@ void scheduler::request(request_closure_t closure) {
 
 scheduler::scheduler() {
     struct io_uring_params params{};
+#if !defined(IO_EVENT_LOOP_HIGH_EFFICIENCY) || defined(IO_EVENT_LOOP_SQPOLL)
     params.flags |= IORING_SETUP_SQPOLL;
     params.features |= IORING_FEAT_SQPOLL_NONFIXED;
     params.sq_thread_idle = IO_URING_SQ_THREAD_IDLE;
+#endif
     io_uring_queue_init_params(IO_URING_DEPTH, &m_io_uring, &params);
 }
 
@@ -116,43 +123,64 @@ scheduler::~scheduler() {
 }
 
 void scheduler::run_loop() {
-    while (m_active || m_contexts.size()) {
-        io_uring_cqe *cqe;
+    auto activate = [this](task *ctx) {
+        m_active_context = ctx;
+        ctx->activate();
+        m_active_context = nullptr;
+    };
+
+    auto process_single_cqe = [this, &activate](io_uring_cqe *cqe) {
+        auto *ctx = reinterpret_cast<task *>(io_uring_cqe_get_data(cqe));
+        m_errno = -cqe->res;
+        io_uring_cqe_seen(&m_io_uring, cqe);
+        activate(ctx);
+        m_errno = 0;
+    };
+
+    auto process_cqe = [this, &process_single_cqe]{
+        io_uring_cqe *cqe{};
+
         while (io_uring_peek_cqe(&m_io_uring, &cqe) == 0) {
-            auto *ctx = reinterpret_cast<task *>(io_uring_cqe_get_data(cqe));
-            m_errno = -cqe->res;
-            io_uring_cqe_seen(&m_io_uring, cqe);
-            m_active_context = ctx;
-            ctx->activate();
-            m_active_context = nullptr;
-            m_errno = 0;
+            process_single_cqe(cqe);
         }
 
-        if (m_contexts.empty()) {
-            sched_yield();
-        } else {
+#if defined(IO_EVENT_LOOP_HIGH_EFFICIENCY) || defined(IO_EVENT_LOOP_WAIT_FOR_CQE)
+        if (m_contexts.empty() && m_microtasks.empty() && !m_submit_request) {
+            if (io_uring_wait_cqe(&m_io_uring, &cqe) == 0) {
+                process_single_cqe(cqe);
+            }
+        }
+#endif
+    };
+
+    auto process_contexts = [this, &activate]{
+        if (!m_contexts.empty()){
             auto front = m_contexts.front();
             m_contexts.pop_front();
-            m_active_context = front;
-            front->activate();
-            m_active_context = nullptr;
+            activate(front);
         }
+    };
 
+    auto process_microtasks = [this] {
         if (!m_microtasks.empty()) {
             for(size_t i = 0; i < m_microtasks.size(); i++) {
                 const auto& microtask = m_microtasks[i];
-                microtask.closure.fn(microtask.closure.data);
-                microtask.destructor.fn(microtask.destructor.data);
+                closure_invoke(microtask.closure);
+                closure_invoke(microtask.destructor);
             }
 
             m_microtasks.clear();
         }
+    };
 
+    auto submit_requests = [this] {
         if (m_submit_request) {
             m_submit_request = false;
             io_uring_submit(&m_io_uring);
         }
+    };
 
+    auto cleanup_contexts = [this] {
         while(!m_cleanup.empty()) {
             auto task_ref = m_cleanup.front();
             m_cleanup.pop_front();
@@ -162,12 +190,24 @@ void scheduler::run_loop() {
             }
 
             for (auto& destructor : task_ref->m_cleanup) {
-                destructor.fn(destructor.data);
+                closure_invoke(destructor);
             }
+
             m_active--;
             delete task_ref;
         }
+    };
 
+    auto is_active = [this] {
+        return m_active || m_contexts.size();
+    };
+
+    while (is_active()) {
+        process_cqe();
+        process_contexts();
+        process_microtasks();
+        submit_requests();
+        cleanup_contexts();
     }
 
     pthread_exit(0);
