@@ -12,7 +12,7 @@ int32_t io_write(int fd, const char *buf, uint32_t amount, size_t offset);
 int32_t io_read(int fd, char *buf, uint32_t amount, size_t offset);
 int32_t io_close(int fd);
 int32_t io_socket(int domain, int type, int protocol, int flags);
-int32_t io_accept(int fd, sockaddr *addr, socklen_t *addrlen, int flags);
+int32_t io_accept(int fd, struct sockaddr *addr, socklen_t *addrlen, int flags);
 
 #ifdef __cplusplus
 }
