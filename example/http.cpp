@@ -48,8 +48,9 @@ int main() {
                 io::file(2).write(error.what());
                 break;
             }
-
         }
+
+        socket.close();
     });
 }
 
