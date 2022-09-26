@@ -141,8 +141,8 @@ io::file io::file::create_socket(int domain, int type, int protocol, int flags) 
 }
 
 void io::file::set_socket_options(int level, int name, int value) const {
-    int opt = 1;
-    if (setsockopt(m_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt)) < 0) {
+    int opt = value;
+    if (setsockopt(m_fd, level, name, &opt, sizeof(opt)) < 0) {
         throw std::runtime_error(std::strerror(errno));
     }
 }
