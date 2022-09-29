@@ -510,19 +510,23 @@ const std::string &io::relative_path::path() const {
     return m_path;
 }
 
-void io::stream::close() const {
+void io::base_stream::close() const {
     auto err = io::close(m_fd);
     if (err > 0) {
         throw std::runtime_error(std::strerror(err));
     }
 }
 
-io::stream::stream(int fd) : m_fd(fd) {
+io::base_stream::base_stream(int fd) : m_fd(fd) {
 
 }
 
+int io::base_stream::fd() const {
+    return m_fd;
+}
 
-io::readable_stream::readable_stream(int fd) : stream(fd) {
+
+io::readable_stream::readable_stream(int fd) : io::stream<io::readable_stream>(fd) {
 
 }
 
@@ -534,9 +538,9 @@ size_t io::readable_stream::read(const std::span<char> &buf, size_t offset) cons
     return -err;
 }
 
-io::readable_stream::readable_stream(const io::stream &base) : stream(base) { }
+io::readable_stream::readable_stream(const io::base_stream &base) : stream(base) { }
 
-io::writable_stream::writable_stream(int fd) : stream(fd) { }
+io::writable_stream::writable_stream(int fd) : io::stream<io::writable_stream>(fd) { }
 
 size_t io::writable_stream::write(const std::span<char> &buf, size_t offset) const {
     auto err = io::write(m_fd, buf.data(), buf.size(), offset);
@@ -554,33 +558,7 @@ size_t io::writable_stream::write(const std::string_view &buf, size_t offset) co
     return -err;
 }
 
-io::writable_stream::writable_stream(const io::stream &base) : stream(base) { }
-
-io::network_stream::network_stream(int sockfd) : stream(sockfd) { }
-
-io::network_stream io::network_stream::create_socket(int domain, int type, int protocol, int flags) {
-    auto err = io::socket(domain, type, protocol, flags);
-    if (err > 0) {
-        throw std::runtime_error(std::strerror(err));
-    }
-    return {-err};
-}
-
-void io::network_stream::set_socket_options(int level, int name, int value) const {
-    int opt = value;
-    if (setsockopt(m_fd, level, name, &opt, sizeof(opt)) < 0) {
-        throw std::runtime_error(std::strerror(errno));
-    }
-}
-
-io::network_stream::network_stream(const io::stream &base) : stream(base) { }
-
-void io::network_stream::shutdown(int how) const {
-    auto err = io::shutdown(m_fd, how);
-    if (err > 0) {
-        throw std::runtime_error(std::strerror(err));
-    }
-}
+io::writable_stream::writable_stream(const io::base_stream &base) : stream(base) { }
 
 io::client::client(int sockfd) : rw_stream<network_stream>(sockfd) {
 
@@ -611,7 +589,34 @@ size_t io::client::recv(std::span<char> &buf, int flags) const {
     return -err;
 }
 
-io::server::server(int sockfd) : network_stream(sockfd) { }
+size_t io::client::recvmsg(msghdr &msghdr, int flags) const {
+    auto err = io::recvmsg(m_fd, &msghdr, flags);
+    if (err > 0) {
+        throw std::runtime_error(std::strerror(err));
+    }
+    return -err;
+}
+
+size_t io::client::sendmsg(const msghdr &msghdr, int flags) const {
+    auto err = io::sendmsg(m_fd, &msghdr, flags);
+    if (err > 0) {
+        throw std::runtime_error(std::strerror(err));
+    }
+    return -err;
+}
+
+io::client io::client::create_tcp(const io::address& address) {
+    auto socket = io::client(create_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP, 0));
+    auto err = io::connect(socket.m_fd, address.m_addr, address.m_addrlen);
+    if (err > 0) {
+        throw std::runtime_error(std::strerror(err));
+    }
+    return socket;
+}
+
+io::client::client(const io::base_stream &base) : io::rw_stream<io::network_stream<io::client>>(base) { }
+
+io::server::server(int sockfd) : io::network_stream<io::server>(sockfd) { }
 
 io::client io::server::accept(io::address &address, bool multishot, int flags) const {
     address = {};
@@ -654,7 +659,7 @@ io::server io::server::create_tcp(const std::string &ip, int port, int queue, in
     return socket;
 }
 
-io::server::server(const io::stream &base) : network_stream(base) { }
+io::server::server(const io::base_stream &base) : network_stream(base) { }
 
 
 void io::dir::link(const std::string &oldpath, const std::string &newpath, int flags) {

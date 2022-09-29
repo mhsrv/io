@@ -292,22 +292,58 @@ namespace io {
         static address from(const std::string& ip, short port);
     };
 
-    struct stream {
-        explicit stream(int fd);
-        void close() const;
-    protected:
-        int m_fd;
+
+
+    template<typename T>
+    struct scoped_stream : public T {
+        scoped_stream(const T* base) : T(*base), m_base(*base) { }
+        ~scoped_stream() {
+            if (m_should_close) {
+                io::close(m_base.fd());
+            }
+        }
+        T persist() {
+            m_should_close = false;
+            return m_base;
+        }
+    private:
+        T m_base;
+        bool m_should_close{true};
+
     };
 
-    struct readable_stream : public stream {
-        explicit readable_stream(const stream& base);
+
+    struct base_stream {
+        explicit base_stream(int fd);
+        void close() const;
+        int fd() const;
+        virtual ~base_stream() = default;
+    protected:
+        int m_fd;
+
+    };
+
+    template<typename T>
+    struct stream : public base_stream {
+        stream(int fd) : base_stream(fd) { }
+        stream(const T& base) : base_stream(base.fd()) { }
+        explicit stream(const base_stream& base) : base_stream(base) { }
+        scoped_stream<T> use() const {
+            return scoped_stream<T>(dynamic_cast<const T*>(this));
+        }
+    };
+
+
+
+    struct readable_stream : public stream<readable_stream> {
+        explicit readable_stream(const base_stream& base);
         readable_stream(int fd);
         size_t read(const std::span<char>& buf, size_t offset = 0) const;
 
     };
 
-    struct writable_stream : public stream {
-        explicit writable_stream(const stream& base);
+    struct writable_stream : public stream<writable_stream> {
+        explicit writable_stream(const base_stream& base);
         writable_stream(int fd);
         size_t write(const std::span<char>& buf, size_t offset = 0) const;
         size_t write(const std::string_view& str, size_t offset = 0) const;
@@ -315,6 +351,7 @@ namespace io {
 
     template<typename T>
     struct rw_stream : public T {
+        explicit rw_stream(const base_stream& base) : T(base) { }
         explicit rw_stream(int fd) : T(fd) { }
         size_t write(const std::span<char>& buf, size_t offset = 0) const {
             return writable_stream(*this).write(buf, offset);
@@ -328,24 +365,49 @@ namespace io {
         }
     };
 
-    struct network_stream : public stream {
-        explicit network_stream(const stream& base);
-        network_stream(int sockfd);
-        void set_socket_options(int level, int name, int value = 1) const;
-        static network_stream create_socket(int domain, int type, int protocol, int flags);
-        void shutdown(int how = SHUT_RDWR) const;
+    template<typename T>
+    struct network_stream: public stream<T> {
+        explicit network_stream(const base_stream& base) : stream<T>(base) {
+        }
+        network_stream(int sockfd) : stream<T>(sockfd) {
+
+        }
+        void set_socket_options(int level, int name, int value = 1) const {
+            int opt = value;
+            if (setsockopt(this->m_fd, level, name, &opt, sizeof(opt)) < 0) {
+                throw std::runtime_error(std::strerror(errno));
+            }
+        }
+
+        static network_stream create_socket(int domain, int type, int protocol, int flags) {
+            auto err = io::socket(domain, type, protocol, flags);
+            if (err > 0) {
+                throw std::runtime_error(std::strerror(err));
+            }
+            return {-err};
+        }
+
+        void shutdown(int how = SHUT_RDWR) const {
+            auto err = io::shutdown(this->m_fd, how);
+            if (err > 0) {
+                throw std::runtime_error(std::strerror(err));
+            }
+        }
     };
 
-    struct client : public rw_stream<network_stream> {
+    struct client : public rw_stream<network_stream<client>> {
         client(int sockfd);
+        explicit client(const base_stream& base);
         size_t send(const std::span<char>& buf, int flags = 0) const;
         size_t send(const std::string_view& str, int flags = 0) const;
         size_t recv(std::span<char>& buf, int flags = 0) const;
-        // todo: add recvmsg & sendmsg, static connect
+        size_t recvmsg(msghdr& msghdr, int flags = 0) const;
+        size_t sendmsg(const msghdr& msghdr, int flags = 0) const;
+        static client create_tcp(const address& address);
     };
 
-    struct server : public network_stream {
-        explicit server(const stream& base);
+    struct server : public network_stream<server> {
+        explicit server(const base_stream& base);
         server(int sockfd);
         client accept(address& address, bool multishot = false, int flags = 0) const;
         void bind(const io::address& addr) const;
@@ -354,7 +416,7 @@ namespace io {
         static server create_tcp(const std::string& ip, int port, int queue = 0, int options = SO_REUSEADDR | SO_REUSEPORT);
     };
 
-    struct file : public rw_stream<stream> {
+    struct file : public rw_stream<stream<file>> {
         file(int fd);
         void sync(int flags = 0) const;
         void set_attribute(const std::string& name, const std::string& value, int flags = 0) const;
@@ -366,7 +428,7 @@ namespace io {
 
     struct relative_path;
 
-    struct directory : public stream {
+    struct directory : public stream<directory> {
         directory(int dfd);
         file open(const std::string& path, mode_t mode, int flags = 0) const;
         void link(const std::string& oldpath, const std::string& newpath, int flags = 0) const;
@@ -407,6 +469,7 @@ namespace io {
         static io::writable_stream error{STDERR_FILENO};
         static io::readable_stream input{STDIN_FILENO};
     }
+
 }
 
 #endif
