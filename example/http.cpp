@@ -8,12 +8,12 @@ constexpr auto headers =
         ENDL;
 
 
-void on_http_request(const io::file client, const io::address address);
+void on_http_request(const io::client client, const io::address address);
 
 int main() {
     async::init([] {
 
-        auto socket = io::file::create_tcp("127.0.0.1", 1234);
+        auto socket = io::server::create_tcp("127.0.0.1", 1234);
 
         while(true) {
             io::address client_address{};
@@ -30,8 +30,13 @@ int main() {
     });
 }
 
-void on_http_request(const io::file client, const io::address address) {
-    client.write(headers);
-    client.write(address.ip() + ":" + std::to_string(address.port()));
-    client.close();
+void finish_client(const io::network_stream& stream) {
+    stream.shutdown();
+    stream.close();
+}
+
+void on_http_request(const io::client client, const io::address address) {
+    client.send(headers);
+    client.send(address.ip() + ":" + std::to_string(address.port()));
+    finish_client(client);
 }

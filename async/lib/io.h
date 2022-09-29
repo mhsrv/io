@@ -276,6 +276,8 @@ namespace io {
         return io_listen(fd, queue);
     }
 
+
+
     struct address {
         sockaddr* m_addr{};
         socklen_t m_addrlen{};
@@ -290,24 +292,121 @@ namespace io {
         static address from(const std::string& ip, short port);
     };
 
-    struct file {
-        file(int fd, bool close = false);
+    struct stream {
+        explicit stream(int fd);
+        void close() const;
+    protected:
+        int m_fd;
+    };
+
+    struct readable_stream : public stream {
+        explicit readable_stream(const stream& base);
+        readable_stream(int fd);
         size_t read(const std::span<char>& buf, size_t offset = 0) const;
+
+    };
+
+    struct writable_stream : public stream {
+        explicit writable_stream(const stream& base);
+        writable_stream(int fd);
         size_t write(const std::span<char>& buf, size_t offset = 0) const;
         size_t write(const std::string_view& str, size_t offset = 0) const;
-        file accept(address& address, int flags = 0) const;
-        void close() const;
+    };
+
+    template<typename T>
+    struct rw_stream : public T {
+        explicit rw_stream(int fd) : T(fd) { }
+        size_t write(const std::span<char>& buf, size_t offset = 0) const {
+            return writable_stream(*this).write(buf, offset);
+        }
+        size_t write(const std::string_view& str, size_t offset = 0) const {
+            return writable_stream(*this).write(str, offset);
+
+        }
+        size_t read(const std::span<char>& buf, size_t offset = 0) const {
+            return readable_stream(*this).read(buf, offset);
+        }
+    };
+
+    struct network_stream : public stream {
+        explicit network_stream(const stream& base);
+        network_stream(int sockfd);
+        void set_socket_options(int level, int name, int value = 1) const;
+        static network_stream create_socket(int domain, int type, int protocol, int flags);
+        void shutdown(int how = SHUT_RDWR) const;
+    };
+
+    struct client : public rw_stream<network_stream> {
+        client(int sockfd);
+        size_t send(const std::span<char>& buf, int flags = 0) const;
+        size_t send(const std::string_view& str, int flags = 0) const;
+        size_t recv(std::span<char>& buf, int flags = 0) const;
+        // todo: add recvmsg & sendmsg, static connect
+    };
+
+    struct server : public network_stream {
+        explicit server(const stream& base);
+        server(int sockfd);
+        client accept(address& address, bool multishot = false, int flags = 0) const;
         void bind(const io::address& addr) const;
         void listen(int queue = 0) const;
-        void set_socket_options(int level, int name, int value = 1) const;
-        static file create_socket(int domain, int type, int protocol, int flags);
-        static file create_tcp(int options = SO_REUSEADDR | SO_REUSEPORT);
-        static file create_tcp(const std::string& ip, int port, int queue = 0, int options = SO_REUSEADDR | SO_REUSEPORT);
-        ~file();
-    private:
-        int m_fd;
-        bool m_should_close;
+        static server create_tcp(int options = SO_REUSEADDR | SO_REUSEPORT);
+        static server create_tcp(const std::string& ip, int port, int queue = 0, int options = SO_REUSEADDR | SO_REUSEPORT);
     };
+
+    struct file : public rw_stream<stream> {
+        file(int fd);
+        void sync(int flags = 0) const;
+        void set_attribute(const std::string& name, const std::string& value, int flags = 0) const;
+        void get_attribute(const std::string& name, std::span<char> value) const;
+        void advise(size_t offset, off_t len, int advice) const;
+        void allocate(off_t offset, off_t len, int mode) const;
+        void sync(size_t offset, unsigned int len, int flags = 0) const;
+    };
+
+    struct relative_path;
+
+    struct directory : public stream {
+        directory(int dfd);
+        file open(const std::string& path, mode_t mode, int flags = 0) const;
+        void link(const std::string& oldpath, const std::string& newpath, int flags = 0) const;
+        void link(const std::string& oldpath, const relative_path& newpath, int flags = 0) const;
+        void mkdir(const std::string& path, mode_t mode) const;
+        void rename(const std::string& oldpath, const std::string& newpath, int flags = 0) const;
+        void rename(const std::string& oldpath, const relative_path& newpath, int flags = 0) const;
+        void symlink(const std::string& target, const std::string& path) const;
+        void unlink(const std::string& path, int flags = 0) const;
+        struct statx stat(const std::string& path, int mask = 0, int flags = 0) const;
+        relative_path relative(const std::string& path) const;
+    };
+
+    struct relative_path {
+        relative_path(const io::directory& directory, const std::string& path);
+        const io::directory& directory() const;
+        const std::string& path() const;
+
+    private:
+        const io::directory& m_directory;
+        const std::string& m_path;
+    };
+
+    namespace dir {
+        static void link(const std::string &oldpath, const std::string &newpath, int flags = 0);
+        static void mkdir(const std::string& path, mode_t mode);
+        static void set_attribute(const std::string& path, const std::string& name, const std::string& value, int flags = 0);
+        static void get_attribute(const std::string& path, const std::string &name, std::span<char> value, int flags = 0);
+        static void rename(const std::string& oldpath, const std::string &newpath);
+        static void symlink(const std::string& target, const std::string &path);
+        static void unlink(const std::string &path, int flags);
+        static io::directory current{AT_FDCWD};
+    }
+
+
+    namespace console {
+        static io::writable_stream output{STDOUT_FILENO};
+        static io::writable_stream error{STDERR_FILENO};
+        static io::readable_stream input{STDIN_FILENO};
+    }
 }
 
 #endif
