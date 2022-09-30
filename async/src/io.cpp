@@ -322,48 +322,38 @@ int32_t io_listen(int fd, int queue) {
 }
 
 }
+
+int32_t io_setsockopt(int fd, int level, int optname, const void *optval, socklen_t optlen) {
+    if (setsockopt(fd, level, optname, optval, optlen) < 0) {
+        return errno;
+    }
+    return 0;
+}
+
 io::file::file(int fd) : rw_stream<stream>(fd) { }
 
-void io::file::sync(int flags) const {
-    auto err = io::fsync(m_fd, flags);
-    if (err > 0) {
-        throw std::runtime_error(std::strerror(err));
-    }
+io::void_t io::file::sync(unsigned int flags) const {
+    IO_VOID_RETURN(io::handle_call(io::fsync)(m_fd, flags));
 }
 
-void io::file::set_attribute(const std::string &name, const std::string &value, int flags) const {
-    auto err = io::fsetxattr(m_fd, name.c_str(), value.c_str(), flags, value.size());
-    if (err > 0) {
-        throw std::runtime_error(std::strerror(err));
-    }
+io::void_t io::file::set_attribute(const std::string &name, const std::string &value, int flags) const {
+    IO_VOID_RETURN(io::handle_call(io::fsetxattr)(m_fd, name.c_str(), value.c_str(), flags, value.size()));
 }
 
-void io::file::get_attribute(const std::string &name, std::span<char> value) const {
-    auto err = io::fgetxattr(m_fd, name.c_str(), value.data(), value.size());
-    if (err > 0) {
-        throw std::runtime_error(std::strerror(err));
-    }
+io::void_t io::file::get_attribute(const std::string &name, const std::span<char>& value) const {
+    IO_VOID_RETURN(io::handle_call(io::fgetxattr)(m_fd, name.c_str(), (const char*)value.data(), value.size()));
 }
 
-void io::file::advise(size_t offset, off_t len, int advice) const {
-    auto err = io::fadvise(m_fd, offset, len, advice);
-    if (err > 0) {
-        throw std::runtime_error(std::strerror(err));
-    }
+io::void_t io::file::advise(size_t offset, off_t len, int advice) const {
+    IO_VOID_RETURN(io::handle_call(io::fadvise)(m_fd, offset, len, advice));
 }
 
-void io::file::allocate(off_t offset, off_t len, int mode) const {
-    auto err = io::fallocate(m_fd, mode, offset, len);
-    if (err > 0) {
-        throw std::runtime_error(std::strerror(err));
-    }
+io::void_t io::file::allocate(off_t offset, off_t len, int mode) const {
+    IO_VOID_RETURN(io::handle_call(io::fallocate)(m_fd, mode, offset, len));
 }
 
-void io::file::sync(size_t offset, unsigned int len, int flags) const {
-    auto err = io::sync_file_range(m_fd, len, offset, flags);
-    if (err > 0) {
-        throw std::runtime_error(std::strerror(err));
-    }
+io::void_t io::file::sync(size_t offset, unsigned int len, int flags) const {
+    IO_VOID_RETURN(io::handle_call(io::sync_file_range)(m_fd, len, offset, flags));
 }
 
 io::address io::address::from(const std::string &ip, short port) {
@@ -427,74 +417,48 @@ io::address::address(const io::address &old) {
 
 io::directory::directory(int dfd) : stream(dfd) { }
 
-io::file io::directory::open(const std::string &path, mode_t mode, int flags) const {
-    auto err = io::openat(m_fd, path.c_str(), flags, mode);
-    if (err > 0) {
-        throw std::runtime_error(std::strerror(err));
-    }
-    return {-err};
+
+IO_RETURN_TYPE(io::file) io::directory::open(const std::string &path, mode_t mode, int flags) const {
+    auto fd = IO_TRY(io::handle_call(io::openat)(m_fd, path.c_str(), flags, mode));
+    return io::file(fd);
 }
 
 
-void io::directory::link(const std::string &oldpath, const std::string &newpath, int flags) const {
-    auto err = io::linkat(m_fd, oldpath.c_str(), m_fd, newpath.c_str(), flags);
-    if (err > 0) {
-        throw std::runtime_error(std::strerror(err));
-    }
+io::void_t io::directory::link(const std::string &oldpath, const std::string &newpath, int flags) const {
+    IO_VOID_RETURN(io::handle_call(io::linkat)(m_fd, oldpath.c_str(), m_fd, newpath.c_str(), flags));
 }
 
-void io::directory::link(const std::string &oldpath, const relative_path& newpath, int flags) const {
-    auto err = io::linkat(m_fd, oldpath.c_str(), newpath.directory().m_fd, newpath.path().c_str(), flags);
-    if (err > 0) {
-        throw std::runtime_error(std::strerror(err));
-    }
+io::void_t io::directory::link(const std::string &oldpath, const relative_path& newpath, int flags) const {
+    IO_VOID_RETURN(io::handle_call(io::linkat)(m_fd, oldpath.c_str(), newpath.directory().m_fd, newpath.path().c_str(), flags));
 }
 
 io::relative_path io::directory::relative(const std::string &path) const {
     return {m_fd, path};
 }
 
-void io::directory::mkdir(const std::string &path, mode_t mode) const {
-    auto err = io::mkdirat(m_fd, path.c_str(), mode);
-    if (err > 0) {
-        throw std::runtime_error(std::strerror(err));
-    }
+io::void_t io::directory::mkdir(const std::string &path, mode_t mode) const {
+    IO_VOID_RETURN(io::handle_call(io::mkdirat)(m_fd, path.c_str(), mode));
 }
 
-void io::directory::rename(const std::string &oldpath, const std::string &newpath, int flags) const {
-    auto err = io::renameat(m_fd, oldpath.c_str(), m_fd, newpath.c_str(), flags);
-    if (err > 0) {
-        throw std::runtime_error(std::strerror(err));
-    }
+io::void_t io::directory::rename(const std::string &oldpath, const std::string &newpath, int flags) const {
+    IO_VOID_RETURN(io::handle_call(io::renameat)(m_fd, oldpath.c_str(), m_fd, newpath.c_str(), flags));
 }
 
-void io::directory::rename(const std::string &oldpath, const io::relative_path &newpath, int flags) const {
-    auto err = io::renameat(m_fd, oldpath.c_str(), newpath.directory().m_fd, newpath.path().c_str(), flags);
-    if (err > 0) {
-        throw std::runtime_error(std::strerror(err));
-    }
+io::void_t io::directory::rename(const std::string &oldpath, const io::relative_path &newpath, int flags) const {
+    IO_VOID_RETURN(io::handle_call(io::renameat)(m_fd, oldpath.c_str(), newpath.directory().m_fd, newpath.path().c_str(), flags));
 }
 
-void io::directory::symlink(const std::string &target, const std::string &path) const {
-    auto err =io::symlinkat(target.c_str(), m_fd, path.c_str());
-    if (err > 0) {
-        throw std::runtime_error(std::strerror(err));
-    }
+io::void_t io::directory::symlink(const std::string &target, const std::string &path) const {
+    IO_VOID_RETURN(io::handle_call(io::symlinkat)(target.c_str(), m_fd, path.c_str()));
 }
 
-void io::directory::unlink(const std::string &path, int flags) const {
-    auto err = io::unlinkat(m_fd, path.c_str(), flags);
-    if (err > 0) {
-        throw std::runtime_error(std::strerror(err));
-    }
+io::void_t io::directory::unlink(const std::string &path, int flags) const {
+    IO_VOID_RETURN(io::handle_call(io::unlinkat)(m_fd, path.c_str(), flags));
 }
 
-struct statx io::directory::stat(const std::string &path, int mask, int flags) const {
+IO_RETURN_TYPE(struct statx) io::directory::stat(const std::string &path, int mask, int flags) const {
     struct statx buffer{};
-    auto err = io::statx(m_fd, path.c_str(), flags, mask, &buffer);
-    if (err > 0) {
-        throw std::runtime_error(std::strerror(err));
-    }
+    IO_TRY(io::handle_call(io::statx)(m_fd, path.c_str(), flags, mask, &buffer));
     return buffer;
 }
 
@@ -510,11 +474,8 @@ const std::string &io::relative_path::path() const {
     return m_path;
 }
 
-void io::base_stream::close() const {
-    auto err = io::close(m_fd);
-    if (err > 0) {
-        throw std::runtime_error(std::strerror(err));
-    }
+io::void_t io::base_stream::close() const {
+    IO_VOID_RETURN(io::handle_call(io::close)(m_fd));
 }
 
 io::base_stream::base_stream(int fd) : m_fd(fd) {
@@ -530,32 +491,20 @@ io::readable_stream::readable_stream(int fd) : io::stream<io::readable_stream>(f
 
 }
 
-size_t io::readable_stream::read(const std::span<char> &buf, size_t offset) const {
-    auto err = io::read(m_fd, buf.data(), buf.size(), offset);
-    if (err > 0) {
-        throw std::runtime_error(std::strerror(err));
-    }
-    return -err;
+IO_RETURN_TYPE(size_t) io::readable_stream::read(const std::span<char> &buf, size_t offset) const {
+    return io::handle_call(io::read)(m_fd, buf.data(), buf.size(), offset);
 }
 
 io::readable_stream::readable_stream(const io::base_stream &base) : stream(base) { }
 
 io::writable_stream::writable_stream(int fd) : io::stream<io::writable_stream>(fd) { }
 
-size_t io::writable_stream::write(const std::span<char> &buf, size_t offset) const {
-    auto err = io::write(m_fd, buf.data(), buf.size(), offset);
-    if (err > 0) {
-        throw std::runtime_error(std::strerror(err));
-    }
-    return -err;
+IO_RETURN_TYPE(size_t) io::writable_stream::write(const std::span<char> &buf, size_t offset) const {
+    return io::handle_call(io::write)(m_fd, buf.data(), buf.size(), offset);
 }
 
-size_t io::writable_stream::write(const std::string_view &buf, size_t offset) const {
-    auto err = io::write(m_fd, buf.data(), buf.size(), offset);
-    if (err > 0) {
-        throw std::runtime_error(std::strerror(err));
-    }
-    return -err;
+IO_RETURN_TYPE(size_t) io::writable_stream::write(const std::string_view &buf, size_t offset) const {
+    return io::handle_call(io::write)(m_fd, buf.data(), buf.size(), offset);
 }
 
 io::writable_stream::writable_stream(const io::base_stream &base) : stream(base) { }
@@ -565,52 +514,29 @@ io::client::client(int sockfd) : rw_stream<network_stream>(sockfd) {
 }
 
 
-size_t io::client::send(const std::span<char> &buf, int flags) const {
-    auto err = io::send(m_fd, buf.data(), buf.size(), flags);
-    if (err > 0) {
-        throw std::runtime_error(std::strerror(err));
-    }
-    return -err;
+IO_RETURN_TYPE(size_t) io::client::send(const std::span<char> &buf, int flags) const {
+    return io::handle_call(io::send)(m_fd, buf.data(), buf.size(), flags);
 }
 
-size_t io::client::send(const std::string_view &str, int flags) const {
-    auto err = io::send(m_fd, str.data(), str.size(), flags);
-    if (err > 0) {
-        throw std::runtime_error(std::strerror(err));
-    }
-    return -err;
+IO_RETURN_TYPE(size_t) io::client::send(const std::string_view &str, int flags) const {
+    return io::handle_call(io::send)(m_fd, str.data(), str.size(), flags);
 }
 
-size_t io::client::recv(std::span<char> &buf, int flags) const {
-    auto err = io::recv(m_fd, buf.data(), buf.size(), flags);
-    if (err > 0) {
-        throw std::runtime_error(std::strerror(err));
-    }
-    return -err;
+IO_RETURN_TYPE(size_t) io::client::recv(std::span<char> &buf, int flags) const {
+    return io::handle_call(io::recv)(m_fd, buf.data(), buf.size(), flags);
 }
 
-size_t io::client::recvmsg(msghdr &msghdr, int flags) const {
-    auto err = io::recvmsg(m_fd, &msghdr, flags);
-    if (err > 0) {
-        throw std::runtime_error(std::strerror(err));
-    }
-    return -err;
+IO_RETURN_TYPE(size_t) io::client::recvmsg(msghdr &msghdr, int flags) const {
+    return io::handle_call(io::recvmsg)(m_fd, &msghdr, flags);
 }
 
-size_t io::client::sendmsg(const msghdr &msghdr, int flags) const {
-    auto err = io::sendmsg(m_fd, &msghdr, flags);
-    if (err > 0) {
-        throw std::runtime_error(std::strerror(err));
-    }
-    return -err;
+IO_RETURN_TYPE(size_t) io::client::sendmsg(const msghdr &msghdr, int flags) const {
+    return io::handle_call(io::sendmsg)(m_fd, &msghdr, flags);
 }
 
-io::client io::client::create_tcp(const io::address& address) {
-    auto socket = io::client(create_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP, 0));
-    auto err = io::connect(socket.m_fd, address.m_addr, address.m_addrlen);
-    if (err > 0) {
-        throw std::runtime_error(std::strerror(err));
-    }
+IO_RETURN_TYPE(io::client) io::client::create_tcp(const io::address& address) {
+    auto socket = io::client(IO_TRY(create_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP, 0)));
+    IO_TRY(io::handle_call(io::connect)(socket.m_fd, address.m_addr, address.m_addrlen));
     return socket;
 }
 
@@ -618,96 +544,61 @@ io::client::client(const io::base_stream &base) : io::rw_stream<io::network_stre
 
 io::server::server(int sockfd) : io::network_stream<io::server>(sockfd) { }
 
-io::client io::server::accept(io::address &address, bool multishot, int flags) const {
+IO_RETURN_TYPE(io::client) io::server::accept(io::address &address, bool multishot, int flags) const {
     address = {};
-    int32_t err;
-    if (multishot) {
-        err = io::multishot_accept(m_fd, (sockaddr *)address.m_addr, &address.m_addrlen, flags);
-    } else {
-        err = io::accept(m_fd, (sockaddr *) address.m_addr, &address.m_addrlen, flags);
-    }
-    if (err > 0) {
-        throw std::runtime_error(std::strerror(err));
-    }
-    return {-err};
+    typedef decltype(io::accept) accept_t;
+    accept_t *accept_fn = multishot ? io::multishot_accept : io::accept;
+    return io::client(IO_TRY(io::handle_call(accept_fn)(m_fd, (sockaddr *) address.m_addr, &address.m_addrlen, flags)));
 }
 
-void io::server::bind(const io::address &addr) const {
-    auto err = io::bind(m_fd, addr.m_addr, addr.m_addrlen);
-    if (err) {
-        throw std::runtime_error(std::strerror(err));
-    }
+io::void_t io::server::bind(const io::address &addr) const {
+    IO_VOID_RETURN(io::handle_call(io::bind)(m_fd, addr.m_addr, addr.m_addrlen));
 }
 
-void io::server::listen(int queue) const {
-    auto err = io::listen(m_fd, queue);
-    if (err) {
-        throw std::runtime_error(std::strerror(err));
-    }
+io::void_t io::server::listen(int queue) const {
+    IO_VOID_RETURN(io::handle_call(io::listen)(m_fd, queue));
 }
 
-io::server io::server::create_tcp(int options) {
-    auto socket = create_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP, 0);
-    socket.set_socket_options(SOL_SOCKET, options);
-    return io::server(socket);
+IO_RETURN_TYPE(io::server) io::server::create_tcp(int options) {
+    auto socket = IO_TRY(create_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP, 0));
+    IO_TRY(socket.set_socket_options(SOL_SOCKET, options));
+    return {io::server(socket)};
 }
 
-io::server io::server::create_tcp(const std::string &ip, int port, int queue, int options) {
-    auto socket = io::server::create_tcp(options);
-    socket.bind(io::address::from(ip, port));
-    socket.listen(queue);
+IO_RETURN_TYPE(io::server) io::server::create_tcp(const std::string &ip, int port, int queue, int options) {
+    auto socket = IO_TRY(io::server::create_tcp(options));
+    IO_TRY(socket.bind(io::address::from(ip, port)));
+    IO_TRY(socket.listen(queue));
     return socket;
 }
 
 io::server::server(const io::base_stream &base) : network_stream(base) { }
 
 
-void io::dir::link(const std::string &oldpath, const std::string &newpath, int flags) {
-    auto err = io::link(oldpath.c_str(), newpath.c_str(), flags);
-    if (err > 0) {
-        throw std::runtime_error(std::strerror(err));
-    }
+io::void_t io::dir::link(const std::string &oldpath, const std::string &newpath, int flags) {
+    IO_VOID_RETURN(io::handle_call(io::link)(oldpath.c_str(), newpath.c_str(), flags));
 }
 
-void io::dir::mkdir(const std::string &path, mode_t mode) {
-    auto err = io::mkdir(const_cast<char *>(path.c_str()), mode);
-    if (err > 0) {
-        throw std::runtime_error(std::strerror(err));
-    }
+io::void_t io::dir::mkdir(const std::string &path, mode_t mode) {
+    IO_VOID_RETURN(io::handle_call(io::mkdir)(const_cast<char *>(path.c_str()), mode));
 }
 
-void io::dir::set_attribute(const std::string &path, const std::string &name, const std::string &value, int flags) {
-    auto err = io::setxattr(path.c_str(), name.c_str(), value.c_str(), flags, value.size());
-    if (err > 0) {
-        throw std::runtime_error(std::strerror(err));
-    }
+io::void_t io::dir::set_attribute(const std::string &path, const std::string &name, const std::string &value, int flags) {
+    IO_VOID_RETURN(io::handle_call(io::setxattr)(path.c_str(), name.c_str(), value.c_str(), flags, value.size()));
 }
 
-void io::dir::get_attribute(const std::string &path, const std::string &name, std::span<char> value, int flags) {
-    auto err = io::setxattr(path.c_str(), name.c_str(), value.data(), flags, value.size());
-    if (err > 0) {
-        throw std::runtime_error(std::strerror(err));
-    }
+io::void_t io::dir::get_attribute(const std::string &path, const std::string &name, std::span<char> value, int flags) {
+    IO_VOID_RETURN(io::handle_call(io::setxattr)(path.c_str(), name.c_str(), value.data(), flags, value.size()));
 }
 
-void io::dir::rename(const std::string &oldpath, const std::string &newpath) {
-    auto err = io::rename(oldpath.c_str(), newpath.c_str());
-    if (err > 0) {
-        throw std::runtime_error(std::strerror(err));
-    }
+io::void_t io::dir::rename(const std::string &oldpath, const std::string &newpath) {
+    IO_VOID_RETURN(io::handle_call(io::rename)(oldpath.c_str(), newpath.c_str()));
 }
 
-void io::dir::symlink(const std::string &target, const std::string &path) {
-    auto err = io::symlink(target.c_str(), path.c_str());
-    if (err > 0) {
-        throw std::runtime_error(std::strerror(err));
-    }
+io::void_t io::dir::symlink(const std::string &target, const std::string &path) {
+    IO_VOID_RETURN(io::handle_call(io::symlink)(target.c_str(), path.c_str()));
 }
 
-void io::dir::unlink(const std::string &path, int flags) {
-    auto err = io::unlink(path.c_str(), flags);
-    if (err > 0) {
-        throw std::runtime_error(std::strerror(err));
-    }
-
+io::void_t io::dir::unlink(const std::string &path, int flags) {
+    IO_VOID_RETURN(io::handle_call(io::unlink)(path.c_str(), flags));
 }
