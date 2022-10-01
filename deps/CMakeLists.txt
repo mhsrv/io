@@ -9,3 +9,10 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(co)
 
+FetchContent_Declare(
+        utils
+        GIT_REPOSITORY https://github.com/mihail-8480/utils
+        GIT_TAG master
+)
+FetchContent_MakeAvailable(utils)
+

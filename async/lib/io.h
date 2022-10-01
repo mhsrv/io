@@ -64,7 +64,7 @@ int32_t io_setsockopt(int fd, int level, int optname, const void *optval, sockle
 #ifdef __cplusplus
 }
 
-#include <io-error.h>
+#include <error.h>
 #include <span>
 #include <cstring>
 
@@ -318,7 +318,7 @@ namespace io {
 
     struct base_stream {
         explicit base_stream(int fd);
-        void_t close() const;
+        utils::void_t close() const;
         int fd() const;
         virtual ~base_stream() = default;
     protected:
@@ -341,29 +341,29 @@ namespace io {
     struct readable_stream : public stream<readable_stream> {
         explicit readable_stream(const base_stream& base);
         readable_stream(int fd);
-        IO_RETURN_TYPE(size_t) read(const std::span<char>& buf, size_t offset = 0) const;
+        OPTIONAL(size_t) read(const std::span<char>& buf, size_t offset = 0) const;
 
     };
 
     struct writable_stream : public stream<writable_stream> {
         explicit writable_stream(const base_stream& base);
         writable_stream(int fd);
-        IO_RETURN_TYPE(size_t) write(const std::span<char>& buf, size_t offset = 0) const;
-        IO_RETURN_TYPE(size_t) write(const std::string_view& str, size_t offset = 0) const;
+        OPTIONAL(size_t) write(const std::span<char>& buf, size_t offset = 0) const;
+        OPTIONAL(size_t) write(const std::string_view& str, size_t offset = 0) const;
     };
 
     template<typename T>
     struct rw_stream : public T {
         explicit rw_stream(const base_stream& base) : T(base) { }
         explicit rw_stream(int fd) : T(fd) { }
-        IO_RETURN_TYPE(size_t) write(const std::span<char>& buf, size_t offset = 0) const {
+        OPTIONAL(size_t) write(const std::span<char>& buf, size_t offset = 0) const {
             return writable_stream(*this).write(buf, offset);
         }
-        IO_RETURN_TYPE(size_t) write(const std::string_view& str, size_t offset = 0) const {
+        OPTIONAL(size_t) write(const std::string_view& str, size_t offset = 0) const {
             return writable_stream(*this).write(str, offset);
 
         }
-        IO_RETURN_TYPE(size_t) read(const std::span<char>& buf, size_t offset = 0) const {
+        OPTIONAL(size_t) read(const std::span<char>& buf, size_t offset = 0) const {
             return readable_stream(*this).read(buf, offset);
         }
     };
@@ -375,50 +375,50 @@ namespace io {
         network_stream(int sockfd) : stream<T>(sockfd) {
 
         }
-        void_t set_socket_options(int level, int name, int value = 1) const {
+        utils::void_t set_socket_options(int level, int name, int value = 1) const {
             int opt = value;
-            IO_VOID_RETURN(io::handle_call(io::setsockopt)(this->m_fd, level, name, &opt, sizeof(opt)));
+            VOID_RETURN(utils::handle_call(io::setsockopt)(this->m_fd, level, name, &opt, sizeof(opt)));
         }
 
-        static IO_RETURN_TYPE(network_stream) create_socket(int domain, int type, int protocol, int flags) {
-            auto sockfd = IO_TRY(io::handle_call(io::socket)(domain, type, protocol, flags));
+        static OPTIONAL(network_stream) create_socket(int domain, int type, int protocol, int flags) {
+            auto sockfd = TRY(utils::handle_call(io::socket)(domain, type, protocol, flags));
             return network_stream(sockfd);
         }
 
-        void_t shutdown(int how = SHUT_RDWR) const {
-            IO_VOID_RETURN(io::handle_call(io::shutdown)(this->m_fd, how));
+        utils::void_t shutdown(int how = SHUT_RDWR) const {
+            VOID_RETURN(utils::handle_call(io::shutdown)(this->m_fd, how));
         }
     };
 
     struct client : public rw_stream<network_stream<client>> {
         client(int sockfd);
         explicit client(const base_stream& base);
-        IO_RETURN_TYPE(size_t) send(const std::span<char>& buf, int flags = 0) const;
-        IO_RETURN_TYPE(size_t) send(const std::string_view& str, int flags = 0) const;
-        IO_RETURN_TYPE(size_t) recv(std::span<char>& buf, int flags = 0) const;
-        IO_RETURN_TYPE(size_t) recvmsg(msghdr& msghdr, int flags = 0) const;
-        IO_RETURN_TYPE(size_t) sendmsg(const msghdr& msghdr, int flags = 0) const;
-        static IO_RETURN_TYPE(client) create_tcp(const address& address);
+        OPTIONAL(size_t) send(const std::span<char>& buf, int flags = 0) const;
+        OPTIONAL(size_t) send(const std::string_view& str, int flags = 0) const;
+        OPTIONAL(size_t) recv(std::span<char>& buf, int flags = 0) const;
+        OPTIONAL(size_t) recvmsg(msghdr& msghdr, int flags = 0) const;
+        OPTIONAL(size_t) sendmsg(const msghdr& msghdr, int flags = 0) const;
+        static OPTIONAL(client) create_tcp(const address& address);
     };
 
     struct server : public network_stream<server> {
         explicit server(const base_stream& base);
         server(int sockfd);
-        IO_RETURN_TYPE(client) accept(address& address, bool multishot = false, int flags = 0) const;
-        void_t bind(const io::address& addr) const;
-        void_t listen(int queue = 0) const;
-        static IO_RETURN_TYPE(server) create_tcp(int options = SO_REUSEADDR | SO_REUSEPORT);
-        static IO_RETURN_TYPE(server) create_tcp(const std::string& ip, int port, int queue = 0, int options = SO_REUSEADDR | SO_REUSEPORT);
+        OPTIONAL(client) accept(address& address, bool multishot = false, int flags = 0) const;
+        utils::void_t bind(const io::address& addr) const;
+        utils::void_t listen(int queue = 0) const;
+        static OPTIONAL(server) create_tcp(int options = SO_REUSEADDR | SO_REUSEPORT);
+        static OPTIONAL(server) create_tcp(const std::string& ip, int port, int queue = 0, int options = SO_REUSEADDR | SO_REUSEPORT);
     };
 
     struct file : public rw_stream<stream<file>> {
         file(int fd);
-        void_t sync(unsigned int flags = 0) const;
-        void_t set_attribute(const std::string& name, const std::string& value, int flags = 0) const;
-        void_t get_attribute(const std::string& name, const std::span<char>& value) const;
-        void_t advise(size_t offset, off_t len, int advice) const;
-        void_t allocate(off_t offset, off_t len, int mode) const;
-        void_t sync(size_t offset, unsigned int len, int flags = 0) const;
+        utils::void_t sync(unsigned int flags = 0) const;
+        utils::void_t set_attribute(const std::string& name, const std::string& value, int flags = 0) const;
+        utils::void_t get_attribute(const std::string& name, const std::span<char>& value) const;
+        utils::void_t advise(size_t offset, off_t len, int advice) const;
+        utils::void_t allocate(off_t offset, off_t len, int mode) const;
+        utils::void_t sync(size_t offset, unsigned int len, int flags = 0) const;
     };
 
     struct relative_path;
@@ -426,15 +426,15 @@ namespace io {
     struct directory : public stream<directory> {
         directory(int dfd);
 
-        IO_RETURN_TYPE(file) open(const std::string& path, mode_t mode, int flags = 0) const;
-        void_t link(const std::string& oldpath, const std::string& newpath, int flags = 0) const;
-        void_t link(const std::string& oldpath, const relative_path& newpath, int flags = 0) const;
-        void_t mkdir(const std::string& path, mode_t mode) const;
-        void_t rename(const std::string& oldpath, const std::string& newpath, int flags = 0) const;
-        void_t rename(const std::string& oldpath, const relative_path& newpath, int flags = 0) const;
-        void_t symlink(const std::string& target, const std::string& path) const;
-        void_t unlink(const std::string& path, int flags = 0) const;
-        IO_RETURN_TYPE(struct statx) stat(const std::string& path, int mask = 0, int flags = 0) const;
+        OPTIONAL(file) open(const std::string& path, mode_t mode, int flags = 0) const;
+        utils::void_t link(const std::string& oldpath, const std::string& newpath, int flags = 0) const;
+        utils::void_t link(const std::string& oldpath, const relative_path& newpath, int flags = 0) const;
+        utils::void_t mkdir(const std::string& path, mode_t mode) const;
+        utils::void_t rename(const std::string& oldpath, const std::string& newpath, int flags = 0) const;
+        utils::void_t rename(const std::string& oldpath, const relative_path& newpath, int flags = 0) const;
+        utils::void_t symlink(const std::string& target, const std::string& path) const;
+        utils::void_t unlink(const std::string& path, int flags = 0) const;
+        OPTIONAL(struct statx) stat(const std::string& path, int mask = 0, int flags = 0) const;
         relative_path relative(const std::string& path) const;
     };
 
@@ -449,13 +449,13 @@ namespace io {
     };
 
     namespace dir {
-        void_t link(const std::string &oldpath, const std::string &newpath, int flags = 0);
-        void_t mkdir(const std::string& path, mode_t mode);
-        void_t set_attribute(const std::string& path, const std::string& name, const std::string& value, int flags = 0);
-        void_t get_attribute(const std::string& path, const std::string &name, std::span<char> value, int flags = 0);
-        void_t rename(const std::string& oldpath, const std::string &newpath);
-        void_t symlink(const std::string& target, const std::string &path);
-        void_t unlink(const std::string &path, int flags);
+        utils::void_t link(const std::string &oldpath, const std::string &newpath, int flags = 0);
+        utils::void_t mkdir(const std::string& path, mode_t mode);
+        utils::void_t set_attribute(const std::string& path, const std::string& name, const std::string& value, int flags = 0);
+        utils::void_t get_attribute(const std::string& path, const std::string &name, std::span<char> value, int flags = 0);
+        utils::void_t rename(const std::string& oldpath, const std::string &newpath);
+        utils::void_t symlink(const std::string& target, const std::string &path);
+        utils::void_t unlink(const std::string &path, int flags);
         static io::directory current{AT_FDCWD};
     }
 

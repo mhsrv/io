@@ -1,4 +1,5 @@
 #include <io.h>
+
 #define ENDL "\r\n"
 
 constexpr auto headers =
@@ -8,24 +9,24 @@ constexpr auto headers =
         ENDL;
 
 
-io::void_t on_http_request(const io::client client, const io::address address);
+utils::void_t on_http_request(const io::client client, const io::address address);
 
 int main() {
-    async::init([] -> io::void_t {
-        auto socket = IO_TRY(io::server::create_tcp("127.0.0.1", 1234)).use();
+    async::init([] -> utils::void_t {
+        auto socket = TRY(io::server::create_tcp("127.0.0.1", 1234)).use();
         while(true) {
             io::address client_address{};
-            auto client = IO_TRY(socket.accept(client_address));
+            auto client = TRY(socket.accept(client_address));
             async::defer(std::bind(on_http_request, client, client_address));
         }
 
-        IO_VOID_DONE;
+        VOID_DONE;
     });
 }
 
-io::void_t on_http_request(const io::client client, const io::address address) {
+utils::void_t on_http_request(const io::client client, const io::address address) {
     auto stream = client.use();
-    IO_TRY(stream.send(headers));
-    IO_TRY(stream.send(address.ip() + ":" + std::to_string(address.port())));
-    IO_VOID_RETURN(stream.shutdown());
+    TRY(stream.send(headers));
+    TRY(stream.send(address.ip() + ":" + std::to_string(address.port())));
+    VOID_RETURN(stream.shutdown());
 }
