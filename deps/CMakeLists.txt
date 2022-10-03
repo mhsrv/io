@@ -4,14 +4,14 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/)
 include(FetchContent)
 FetchContent_Declare(
         co
-        GIT_REPOSITORY https://github.com/mihail-8480/libco-amd64-cmake
+        GIT_REPOSITORY https://github.com/mhsrv/libco-cmake
         GIT_TAG master
 )
 FetchContent_MakeAvailable(co)
 
 FetchContent_Declare(
         utils
-        GIT_REPOSITORY https://github.com/mihail-8480/utils
+        GIT_REPOSITORY https://github.com/mhsrv/utils
         GIT_TAG master
 )
 FetchContent_MakeAvailable(utils)
