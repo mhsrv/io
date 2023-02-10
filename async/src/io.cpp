@@ -82,7 +82,7 @@ int32_t io_fallocate( int fd, int mode, off_t offset, off_t len) {
     });
 }
 
-int32_t io_fgetxattr(int fd, const char *name, const char *value, size_t len) {
+int32_t io_fgetxattr(int fd, const char *name, char *value, size_t len) {
     return async::request([fd, name, value, len](io_uring_sqe *sqe) {
         io_uring_prep_fgetxattr(sqe, fd, name, value, len);
     });
@@ -340,8 +340,8 @@ utils::void_t io::file::set_attribute(const std::string &name, const std::string
     VOID_RETURN(utils::handle_call(io::fsetxattr)(m_fd, name.c_str(), value.c_str(), flags, value.size()));
 }
 
-utils::void_t io::file::get_attribute(const std::string &name, const std::span<char>& value) const {
-    VOID_RETURN(utils::handle_call(io::fgetxattr)(m_fd, name.c_str(), (const char*)value.data(), value.size()));
+utils::void_t io::file::get_attribute(const std::string &name, std::span<char>& value) const {
+    VOID_RETURN(utils::handle_call(io::fgetxattr)(m_fd, name.c_str(), (char*)value.data(), value.size()));
 }
 
 utils::void_t io::file::advise(size_t offset, off_t len, int advice) const {

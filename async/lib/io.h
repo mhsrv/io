@@ -22,7 +22,7 @@ int32_t io_connect(int fd, const struct sockaddr *addr, socklen_t addrlen);
 int32_t io_epoll_ctl(int epfd, int fd, int op, struct epoll_event *ev);
 int32_t io_fadvise(int fd, size_t offset, off_t len, int advice);
 int32_t io_fallocate( int fd, int mode, off_t offset, off_t len);
-int32_t io_fgetxattr(int fd, const char *name, const char *value, size_t len);
+int32_t io_fgetxattr(int fd, const char *name, char *value, size_t len);
 int32_t io_fsetxattr(int fd, const char *name, const char *value, int flags, size_t len);
 int32_t io_files_update(int *fds, unsigned int nr_fds, int offset);
 int32_t io_fsync(int fd, unsigned int fsync_flags);
@@ -125,7 +125,7 @@ namespace io {
         return io_fallocate(fd, mode, offset, len);
     }
 
-    static inline int32_t fgetxattr(int fd, const char *name, const char *value, size_t len) {
+    static inline int32_t fgetxattr(int fd, const char *name, char *value, size_t len) {
         return io_fgetxattr(fd, name, value, len);
     }
 
@@ -415,7 +415,7 @@ namespace io {
         file(int fd);
         utils::void_t sync(unsigned int flags = 0) const;
         utils::void_t set_attribute(const std::string& name, const std::string& value, int flags = 0) const;
-        utils::void_t get_attribute(const std::string& name, const std::span<char>& value) const;
+        utils::void_t get_attribute(const std::string& name, std::span<char>& value) const;
         utils::void_t advise(size_t offset, off_t len, int advice) const;
         utils::void_t allocate(off_t offset, off_t len, int mode) const;
         utils::void_t sync(size_t offset, unsigned int len, int flags = 0) const;
