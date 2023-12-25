@@ -16,3 +16,9 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(utils)
 
+FetchContent_Declare(
+        MPMCQueue
+        GIT_REPOSITORY https://github.com/rigtorp/MPMCQueue
+        GIT_TAG master
+)
+FetchContent_MakeAvailable(MPMCQueue)

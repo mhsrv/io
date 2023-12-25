@@ -6,7 +6,7 @@ void request_handler(std::function<void(io_uring_sqe *)> *fn, io_uring_sqe *sqe)
 
 int32_t async::request(std::function<void(io_uring_sqe *)> fn) {
     request(request_handler, &fn);
-    return *reinterpret_cast<int32_t*>(io_event_scheduler_request_resource(RES_ERRNO));
+    return scheduler_local()->m_errno;
 }
 
 void closure_handler(void *data) {
@@ -35,8 +35,9 @@ void async::queue_microtask(std::function<void()> &&closure) {
 
 void async::init(std::function<void()> &&fn) {
     auto* callback = new std::function(fn);
-    auto* task = defer(defer_handler, callback);
-    io_task_register_destructor(task, {closure_cleanup, callback});
+    start_and_queue([callback]{
+        auto* task = defer(defer_handler, callback);
+        io_task_register_destructor(task, {closure_cleanup, callback});
+    });
     async_init();
 }
-

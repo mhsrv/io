@@ -3,7 +3,7 @@
 
 #include <libco.h>
 
-#define IO_URING_DEPTH 1024*32
+#define IO_URING_DEPTH (1024*32)
 #define IO_URING_SQ_THREAD_IDLE 120000
 typedef void delegate_fn(void *data);
 typedef void sqe_delegate_fn(void *data, void *sqe);
@@ -23,33 +23,33 @@ typedef struct request_closure {
 #include <deque>
 #include <vector>
 #include <cstdint>
+#include <functional>
 #include <liburing.h>
 struct task;
+
+void start_and_queue(const std::function<void()>& fn);
 
 typedef struct microtask {
     closure_t closure;
     closure_t destructor;
 } microtask_t;
 
+
 typedef class scheduler {
 public:
-    scheduler();
-    void queue(task *task);
-    void request(request_closure_t closure);
+    void queue(task *task, int32_t error);
+    void request(request_closure_t closure) const;
     void queue_for_cleanup(task *task_ref);
     void queue_microtask(closure_t closure, closure_t destructor);
     void run_loop();
-    ~scheduler();
 
     cothread_t m_thread;
-    std::deque<task*> m_contexts{};
+    std::deque<std::tuple<task*, int32_t>> m_contexts{};
     std::deque<task*> m_cleanup{};
     std::vector<microtask_t> m_microtasks{};
-    int32_t m_errno{};
     uint32_t m_active{};
-    io_uring m_io_uring{};
+    int32_t m_errno{};
     task* m_active_context;
-    bool m_submit_request{};
 } scheduler_t;
 
 
@@ -85,14 +85,14 @@ typedef enum scheduler_resource {
 } scheduler_resource_t;
 
 void io_event_scheduler_thread_activate(void);
-void io_event_scheduler_queue(scheduler_t *scheduler, task_t *task);
-void io_event_scheduler_request(scheduler_t *scheduler, request_closure_t closure);
-void *io_event_scheduler_request_resource(scheduler_resource_t resource);
+void io_event_scheduler_queue(task_t *task);
+void io_event_scheduler_request(request_closure_t closure);
 void io_event_scheduler_queue_microtask(closure_t closure, closure_t destructor);
 void io_task_suspend();
 void io_task_register_destructor(task_t *task, closure_t destructor);
 void io_task_await(task_t *task);
 task_t *io_task_create(closure_t closure, size_t stack_size);
+scheduler_t *scheduler_local();
 
 #ifdef __cplusplus
 }

@@ -463,7 +463,7 @@ OPTIONAL(struct statx) io::directory::stat(const std::string &path, int mask, in
 }
 
 io::relative_path::relative_path(const io::directory &directory, const std::string &path)
-:  m_directory(directory), m_path(path) {
+        :  m_directory(directory), m_path(path) {
 }
 
 const io::directory &io::relative_path::directory() const {
