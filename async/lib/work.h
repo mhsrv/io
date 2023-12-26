@@ -1,7 +1,6 @@
 #pragma once
 
-#include <rigtorp/MPMCQueue.h>
-
+#include <channel.h>
 #include <functional>
 #include <thread>
 #include <vector>
@@ -9,35 +8,25 @@
 namespace io {
     class worker_pool;
 
-    class worker_context {
-    public:
-        constexpr worker_context(uint64_t thread_id, bool *terminate, worker_pool &pool);
-        void terminate() const;
-        void execute();
-        void execute_main_thread();
-        [[nodiscard]] bool active() const;
-        [[nodiscard]] worker_pool &pool() const;
-        [[nodiscard]] uint64_t id() const;
-
-    private:
-        const uint64_t m_thread_id;
-        worker_pool &m_pool;
-        bool *const m_terminate;
+    typedef channel<std::function<void()>> action_channel_t;
+    struct worker_context {
+        action_channel_t& channel;
+        worker_pool& pool;
     };
+
 
     class worker_pool {
     public:
-        void execute_on_main_thread(std::function<void()> &&fn);
-        void queue_work(std::function<void(worker_context &ctx)> &&fn);
-        void start(void init(), void main_tick());
-        void stop();
-        void soft_start();
-        static worker_context& current();
-        rigtorp::MPMCQueue<std::function<void(worker_context &ctx)>*> m_workload{1024};
-        rigtorp::MPMCQueue<std::function<void()>*> m_main_thread_workload{1024};
-
+        worker_pool(const std::function<void(worker_context ctx)>& workerInit, const std::function<void(worker_context ctx)>& requestInit);
+        void submit_request(std::function<void()> &&request);
+        void submit_work(std::function<void()> &&work);
+        void join();
     private:
-        void init_loop(uint64_t thread_id);
-        static thread_local bool m_should_terminate;
+        action_channel_t m_request_channel{};
+        action_channel_t m_worker_channel{};
+        std::vector<std::thread*> m_threads{};
     };
+
+    bool consume_action(const worker_context& ctx, size_t max_fails = 20);
+    bool consume_action(action_channel_t& channel, size_t max_fails = 20);
 }
